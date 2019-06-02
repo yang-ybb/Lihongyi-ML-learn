@@ -1,81 +1,102 @@
-class LogisticRegression():
-    '''
-    :param lr: 学习率
-    :param num_iters: 更新轮数
-    :param seed: 随机数种子
-    '''
-    def __init__(self, lr=0.1, num_iters=100, seed=None):
-        self.seed = seed
-        self.lr = lr
-        self.num_iters = num_iters
+from numpy import *
+import matplotlib.pyplot as plt
+import operator
+import time
 
+LINE_OF_DATA = 6
+LINE_OF_TEST = 4
 
-    def fit(self, x, y):
-        np.random.seed(self.seed)
-        # 参数初始化w b
-        self.w = np.random.normal(loc=0.0, scale=1.0, size=x.shape[1])
-        self.b = np.random.normal(loc=0.0, scale=1.0)
-        # 数据集
-        self.x = x
-        self.y = y
-        # 迭代更新
-        for i in range(self.num_iters):
-            self._update_step()
+def createTrainDataSet():
+    trainDataMat = [[1, 1, 4], 
+                    [1, 2, 3], 
+                    [1, -2, 3], 
+                    [1, -2, 2], 
+                    [1, 0, 1], 
+                    [1, 1, 2]]
+    trainShares = [1, 1, 1, 0, 0,  0]
+    return trainDataMat, trainShares
 
-    
-    # sigmod处理
-    def _sigmoid(self, z):
-        return 1.0 / (1.0 + np.exp(-z))
+def createTestDataSet():
+    testDataMat = [[1, 1, 1], 
+                   [1, 2, 0], 
+                   [1, 2, 4], 
+                   [1, 1, 3]]
+    return testDataMat
 
+def autoNorm(dataSet):
+    minVals = dataSet.min(0)
+    maxVals = dataSet.max(0)
+    ranges = maxVals - minVals
+    normDataSet = zeros(shape(dataSet))
+    m = dataSet.shape[0]
+    normDataSet = dataSet - tile(minVals, (m, 1))
+    normDataSet = normDataSet / tile(ranges, (m, 1))
+    return normDataSet[:LINE_OF_DATA], normDataSet[LINE_OF_DATA:]
 
-    # 函数模型 w*x + b，经过SIGMOD处理
-    def _f(self, x, w, b):
-        z = x.dot(w) + b
-        return self._sigmoid(z)
+def sigmoid(inX):
+    return 1.0 / (1 + exp(-inX))
 
+def gradAscent(dataMatIn, classLabels, alpha=0.001, maxCycles=1000):
+    dataMatrix = mat(dataMatIn)
+    labelMat = mat(classLabels).transpose()
+    m, n = shape(dataMatrix)
+    weights = ones((n, 1))
+    for k in range(maxCycles):
+        h = sigmoid(dataMatrix * weights)
+        error = (labelMat - h)
+        weights = weights + alpha * dataMatrix.transpose() * error
+    return weights
 
-    # 初次预测算出概率        
-    def predict_proba(self, x=None):
-        if x is None:
-            x = self.x
-        y_pred = self._f(x, self.w, self.b)
-        return y_pred
+def plotBestFit(weights):
+    dataMat, labelMat = createTrainDataSet()
+    dataArr = array(dataMat)
+    n = shape(dataArr)[0]
+    xcord1 = []; ycord1 = []
+    xcord2 = []; ycord2 = []
+    for i in range(n):
+        if int(labelMat[i]) == 1:
+            xcord1.append(dataArr[i, 1])
+            ycord1.append(dataArr[i, 2])
+        else:
+            xcord2.append(dataArr[i, 1])
+            ycord2.append(dataArr[i, 2])
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(xcord1, ycord1, s=30, c='red', marker='s')
+    ax.scatter(xcord2, ycord2, s=30, c='green')
+    x = arange(-3.0, 3.0, 0.1)
+    y = (-weights[0] - weights[1] * x) / weights[2]
+    ax.plot(x, y)
+    plt.xlabel('X1'); plt.ylabel('X2')
+    plt.show()
 
+def classifyVector(inX, weights):
+    prob = sigmoid(sum(inX * weights))
+    if prob > 0.5:
+        return 1
+    else:
+        return 0
 
-    # 再预测，根据概率分类
-    def predict(self, x=None):
-        if x is None:
-            x = self.x
-        y_pred_proba = self._f(x, self.w, self.b)
-        y_pred = np.array([0 if y_pred_proba[i] < 0.5 else 1 for i in range(len(y_pred_proba))])
-        return y_pred
+def classifyAll(dataSet, weights):
+    predict = []
+    for vector in dataSet:
+        predict.append(classifyVector(vector, weights))
+    return predict
 
+def main():
+    trainDataSet, trainShares = createTrainDataSet()
+    testDataSet = createTestDataSet()
+    #trainDataSet, testDataSet = autoNorm(vstack((mat(trainDataSet), mat(testDataSet))))
+    regMatrix = gradAscent(trainDataSet, trainShares, 0.01, 600)
+    print("regMatrix = \n", regMatrix)
+    plotBestFit(regMatrix.getA())
+    predictShares = classifyAll(testDataSet, regMatrix)
+    print("predictResult: \n", predictShares)
 
-    # 为分类进行评分
-    def score(self, y_true=None, y_pred=None):
-        if y_true is None or y_pred is None:
-            y_true = self.y
-            y_pred = self.predict()
-        # 计算准确率            
-        acc = np.mean([1 if y_true[i] == y_pred[i] else 0 for i in range(len(y_true))])
-        return acc
-
-
-    # 损失函数
-    def loss(self, y_true=None, y_pred_proba=None):
-        if y_true is None or y_pred_proba is None:
-            y_true = self.y
-            y_pred_proba = self.predict_proba()
-        return np.mean(-1.0 * (y_true * np.log(y_pred_proba) + (1.0 - y_true) * np.log(1.0 - y_pred_proba)))
-
-
-    # 梯度下降
-    def gradient_descent(self):
-        y_pred = self.predict()
-        d_w = (y_pred - self.y).dot(self.x) / len(self.y)
-        d_b = np.mean(y_pred - self.y)
-        self.w = self.w - self.lr * d_w
-        self.b = self.b - self.lr * d_b
-        return self.w, self.b
+if __name__ == '__main__':
+    start = time.clock()
+    main()
+    end = time.clock()
+    print('finish all in %s' % str(end - start))
         
         
