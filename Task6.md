@@ -1,3 +1,4 @@
+```
 from numpy import *
 import matplotlib.pyplot as plt
 import operator
@@ -98,3 +99,4 @@ if __name__ == '__main__':
     main()
     end = time.clock()
     print('finish all in %s' % str(end - start))
+```
